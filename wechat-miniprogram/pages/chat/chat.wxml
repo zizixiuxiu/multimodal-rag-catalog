@@ -1,0 +1,133 @@
+<view class="chat-page">
+  <!-- 消息列表 -->
+  <scroll-view
+    class="message-list"
+    scroll-y
+    scroll-into-view="{{scrollToId}}"
+    enhanced
+    show-scrollbar
+  >
+    <block wx:for="{{messages}}" wx:key="id">
+      <view id="msg-{{item.id}}" class="msg-wrapper {{item.role}}">
+        <!-- 头像 -->
+        <view class="avatar {{item.role}}">
+          <text wx:if="{{item.role === 'user'}}">客</text>
+          <text wx:else>奢</text>
+        </view>
+
+        <!-- 气泡 -->
+        <view class="bubble {{item.role}}">
+          <!-- 文本内容 -->
+          <rich-text wx:if="{{item.formattedText}}" nodes="{{item.formattedText}}" />
+          <text wx:else>{{item.text}}</text>
+
+          <!-- 产品卡片（价格数据） -->
+          <view wx:if="{{item.products && item.products.length > 0}}" class="product-cards">
+            <block wx:for="{{item.products}}" wx:for-item="p" wx:key="model_no">
+              <view class="product-card">
+                <view class="card-header">
+                  <text class="model-no">{{p.model_no}}</text>
+                  <text wx:if="{{p.model_name}}" class="model-name">{{p.model_name}}</text>
+                </view>
+                <view class="card-body">
+                  <view class="spec-row">
+                    <text class="spec-label">颜色</text>
+                    <text class="spec-value">{{p.color_name || '-'}}</text>
+                  </view>
+                  <view class="spec-row">
+                    <text class="spec-label">基材</text>
+                    <text class="spec-value">{{p.substrate || '-'}}</text>
+                  </view>
+                  <view class="spec-row">
+                    <text class="spec-label">厚度</text>
+                    <text class="spec-value">{{p.thickness ? p.thickness + 'mm' : '-'}}</text>
+                  </view>
+                  <view class="spec-row">
+                    <text class="spec-label">单价</text>
+                    <text class="spec-value price">{{p.unit_price ? p.unit_price + p.unit : '-'}}</text>
+                  </view>
+                  <view wx:if="{{p.area !== null && p.area !== undefined}}" class="spec-row">
+                    <text class="spec-label">面积</text>
+                    <text class="spec-value">{{p.area}}㎡</text>
+                  </view>
+                  <view wx:if="{{p.total_price !== null && p.total_price !== undefined}}" class="spec-row total">
+                    <text class="spec-label">总价</text>
+                    <text class="spec-value total-price">¥{{p.total_price}} 元</text>
+                  </view>
+                </view>
+                <!-- 产品图片 -->
+                <view wx:if="{{p.image_urls && p.image_urls.length > 0}}" class="card-images">
+                  <image
+                    wx:for="{{p.image_urls}}"
+                    wx:for-item="img"
+                    wx:key="*this"
+                    src="{{img.startsWith('http') ? img : apiBase + img}}"
+                    mode="aspectFill"
+                    bindtap="previewImage"
+                    data-urls="{{p.image_urls}}"
+                    data-current="{{img}}"
+                  />
+                </view>
+              </view>
+            </block>
+          </view>
+
+          <!-- 引导选项按钮 -->
+          <view wx:if="{{item.options && item.options.length > 0}}" class="options-bar">
+            <view class="options-label">{{item.optionsLabel}}</view>
+            <view class="options-list">
+              <button
+                wx:for="{{item.options}}"
+                wx:for-item="opt"
+                wx:key="*this"
+                class="option-btn"
+                size="mini"
+                bindtap="onOptionTap"
+                data-value="{{opt}}"
+              >{{opt}}</button>
+            </view>
+          </view>
+        </view>
+      </view>
+    </block>
+
+    <!-- 加载中 -->
+    <view wx:if="{{loading}}" class="msg-wrapper bot loading">
+      <view class="avatar bot">
+        <text>奢</text>
+      </view>
+      <view class="bubble bot">
+        <view class="typing">
+          <text>思考中</text>
+          <view class="dots">
+            <view class="dot"></view>
+            <view class="dot"></view>
+            <view class="dot"></view>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 底部占位 -->
+    <view style="height: 40rpx;"></view>
+  </scroll-view>
+
+  <!-- 底部输入区 -->
+  <view class="input-area">
+    <view class="input-box">
+      <input
+        value="{{inputValue}}"
+        bindinput="onInput"
+        bindconfirm="onSend"
+        placeholder="请输入型号或问题，如：MX-A01 多少钱"
+        placeholder-class="placeholder"
+        confirm-type="send"
+      />
+    </view>
+    <button
+      class="send-btn {{inputValue.trim() ? 'active' : ''}}"
+      bindtap="onSend"
+      disabled="{{loading || !inputValue.trim()}}"
+    >发送</button>
+  </view>
+</view>

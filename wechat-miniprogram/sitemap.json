@@ -1,0 +1,7 @@
+{
+  "description": "奢匠报价助手小程序",
+  "rules": [{
+    "action": "allow",
+    "page": "*"
+  }]
+}

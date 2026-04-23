@@ -1,0 +1,48 @@
+# Web Framework
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+python-multipart==0.0.17
+
+# Database
+sqlalchemy==2.0.36
+alembic==1.14.0
+psycopg2-binary==2.9.10
+pgvector==0.3.6
+
+# MinIO (Object Storage)
+minio==7.2.12
+
+# Vector & ML
+sentence-transformers==3.3.1
+transformers==4.46.3
+torch==2.5.1
+numpy==1.26.4
+Pillow==11.0.0
+
+# LangChain / LangGraph
+langchain==0.3.9
+langchain-community==0.3.9
+langchain-openai==0.2.11
+langgraph==0.2.56
+
+# Document Parsing
+marker-pdf==1.2.3
+unstructured==0.16.9
+pdf2image==1.17.0
+
+# OCR (Optional, for table extraction)
+paddlepaddle==3.0.0b2
+paddleocr==2.9.1
+
+# Utils
+pydantic==2.10.3
+pydantic-settings==2.6.1
+python-dotenv==1.0.1
+httpx==0.28.0
+tenacity==9.0.0
+structlog==24.4.0
+
+# Testing
+pytest==8.3.4
+pytest-asyncio==0.24.0
+httpx==0.28.0
