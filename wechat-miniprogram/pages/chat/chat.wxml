@@ -11,7 +11,7 @@
       <view id="msg-{{item.id}}" class="msg-wrapper {{item.role}}">
         <!-- 头像 -->
         <view class="avatar {{item.role}}">
-          <text wx:if="{{item.role === 'user'}}">客</text>
+          <text wx:if="{{item.role == 'user'}}">客</text>
           <text wx:else>奢</text>
         </view>
 
@@ -30,9 +30,13 @@
                   <text wx:if="{{p.model_name}}" class="model-name">{{p.model_name}}</text>
                 </view>
                 <view class="card-body">
+                  <view class="spec-row" wx:if="{{p.component_type}}">
+                    <text class="spec-label">类型</text>
+                    <text class="spec-value">{{p.component_type}}</text>
+                  </view>
                   <view class="spec-row">
                     <text class="spec-label">颜色</text>
-                    <text class="spec-value">{{p.color_name || '-'}}</text>
+                    <text class="spec-value">{{p._color_display}}</text>
                   </view>
                   <view class="spec-row">
                     <text class="spec-label">基材</text>
@@ -46,25 +50,54 @@
                     <text class="spec-label">单价</text>
                     <text class="spec-value price">{{p.unit_price ? p.unit_price + p.unit : '-'}}</text>
                   </view>
-                  <view wx:if="{{p.area !== null && p.area !== undefined}}" class="spec-row">
+                  <view wx:if="{{p._has_area}}" class="spec-row">
                     <text class="spec-label">面积</text>
                     <text class="spec-value">{{p.area}}㎡</text>
                   </view>
-                  <view wx:if="{{p.total_price !== null && p.total_price !== undefined}}" class="spec-row total">
+                  <view wx:if="{{p._has_effective_area}}" class="spec-row">
+                    <text class="spec-label">计价面积</text>
+                    <text class="spec-value price">{{p.effective_area}}㎡</text>
+                  </view>
+                  <view wx:if="{{p._has_total_price}}" class="spec-row total">
                     <text class="spec-label">总价</text>
                     <text class="spec-value total-price">¥{{p.total_price}} 元</text>
                   </view>
+                  <!-- 计价规则 -->
+                  <view wx:if="{{p.rules_applied && p.rules_applied.length > 0}}" class="rules-box">
+                    <view class="rules-title">📋 计价规则</view>
+                    <view wx:for="{{p.rules_applied}}" wx:for-item="rule" wx:key="*this" class="rule-item">• {{rule}}</view>
+                  </view>
+                  <!-- 警告提示 -->
+                  <view wx:if="{{p.warnings && p.warnings.length > 0}}" class="warn-box">
+                    <view wx:for="{{p.warnings}}" wx:for-item="warn" wx:key="*this" class="warn-item">⚠️ {{warn}}</view>
+                  </view>
+                  <!-- 可做门型 -->
+                  <view wx:if="{{p.applicable_models && p.applicable_models.length > 0}}" class="models-box">
+                    <text class="models-label">可做门型：</text>
+                    <view class="models-grid">
+                      <view wx:for="{{p.applicable_models}}" wx:for-item="m" wx:key="model_no" class="model-card">
+                        <view class="model-image-wrap" wx:if="{{m._has_image}}">
+                          <image src="{{m._local_image_url || m._image_urls[0]}}" mode="aspectFill" class="model-image" lazy-load="{{false}}" webp="{{true}}" bindload="onImageLoad" binderror="onImageError" data-index="{{index}}" bindtap="previewImage" data-urls="{{m._image_urls}}" data-current="{{m._image_urls[0]}}"/>
+                        </view>
+                        <view class="model-image-wrap model-image-empty" wx:else>
+                          <text class="model-image-placeholder">暂无图片</text>
+                        </view>
+                        <text class="model-name">{{m.name}}</text>
+                        <text class="model-desc" wx:if="{{m.description}}">{{m.description}}</text>
+                      </view>
+                    </view>
+                  </view>
                 </view>
                 <!-- 产品图片 -->
-                <view wx:if="{{p.image_urls && p.image_urls.length > 0}}" class="card-images">
+                <view wx:if="{{p._image_urls && p._image_urls.length > 0}}" class="card-images">
                   <image
-                    wx:for="{{p.image_urls}}"
+                    wx:for="{{p._image_urls}}"
                     wx:for-item="img"
                     wx:key="*this"
-                    src="{{img.startsWith('http') ? img : apiBase + img}}"
+                    src="{{img}}"
                     mode="aspectFill"
                     bindtap="previewImage"
-                    data-urls="{{p.image_urls}}"
+                    data-urls="{{p._image_urls}}"
                     data-current="{{img}}"
                   />
                 </view>
@@ -72,21 +105,7 @@
             </block>
           </view>
 
-          <!-- 引导选项按钮 -->
-          <view wx:if="{{item.options && item.options.length > 0}}" class="options-bar">
-            <view class="options-label">{{item.optionsLabel}}</view>
-            <view class="options-list">
-              <button
-                wx:for="{{item.options}}"
-                wx:for-item="opt"
-                wx:key="*this"
-                class="option-btn"
-                size="mini"
-                bindtap="onOptionTap"
-                data-value="{{opt}}"
-              >{{opt}}</button>
-            </view>
-          </view>
+
         </view>
       </view>
     </block>
@@ -119,15 +138,15 @@
         value="{{inputValue}}"
         bindinput="onInput"
         bindconfirm="onSend"
-        placeholder="请输入型号或问题，如：MX-A01 多少钱"
+        placeholder="请输入型号或问题，如：客厅柜身咖啡灰颗粒板18mm"
         placeholder-class="placeholder"
         confirm-type="send"
       />
     </view>
     <button
-      class="send-btn {{inputValue.trim() ? 'active' : ''}}"
+      class="send-btn {{inputValue ? 'active' : ''}}"
       bindtap="onSend"
-      disabled="{{loading || !inputValue.trim()}}"
+      disabled="{{loading || !inputValue}}"
     >发送</button>
   </view>
 </view>

@@ -4,6 +4,7 @@ from typing import List, Optional
 
 from sqlalchemy import (
     JSON,
+    ARRAY,
     Boolean,
     Column,
     DECIMAL,
@@ -13,7 +14,7 @@ from sqlalchemy import (
     Text,
 )
 from pgvector.sqlalchemy import Vector
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.config import settings
@@ -57,11 +58,21 @@ class PriceVariant(Base, TimestampMixin):
     color_code: Mapped[Optional[str]] = mapped_column(String(20), comment="色卡编号")
     substrate: Mapped[str] = mapped_column(String(50), nullable=False, comment="ENF级实木颗粒板")
     thickness: Mapped[int] = mapped_column(Integer, nullable=False, comment="18 (mm)")
+    component_type: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="门板", comment="柜身 / 门板 / 护墙 / 见光板 / 抽面"
+    )
     unit_price: Mapped[float] = mapped_column(DECIMAL(10, 2), nullable=False, comment="精确到分")
     unit: Mapped[str] = mapped_column(String(20), default="元/㎡", comment="计价单位")
     spec: Mapped[Optional[dict]] = mapped_column(JSON, default=dict, comment="其他规格参数")
     is_standard: Mapped[bool] = mapped_column(Boolean, default=True, comment="是否标准品")
     remark: Mapped[Optional[str]] = mapped_column(Text, comment="备注（非标说明等）")
+    # 计价规则字段
+    min_charge_area: Mapped[Optional[float]] = mapped_column(
+        DECIMAL(5, 3), nullable=True, comment="最低计价面积（㎡），如 0.1 / 0.2 / 0.3 / 0.5"
+    )
+    applicable_models: Mapped[Optional[List[str]]] = mapped_column(
+        postgresql.ARRAY(Text), nullable=True, comment="可做门型列表，如 ['MX-A01','MX-A02']"
+    )
 
     # Relationships
     product: Mapped[Optional["Product"]] = relationship("Product", back_populates="variants")

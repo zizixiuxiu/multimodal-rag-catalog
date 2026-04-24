@@ -34,31 +34,48 @@ class QueryUnderstandingEngine:
     # Thickness: must not be part of a larger number, reasonable range 5-100
     # Use (?<!\d) and (?!\d) instead of \b because \b treats CJK chars as word chars in Unicode mode
     THICKNESS_PATTERN = re.compile(r"(?<!\d)([1-9]\d{1,2})\s*(?:mm|毫米|厘)(?!\d)")
-    # Dimensions: e.g. 2000mm*50mm, 2m*0.5m, 2000*50
+    # Dimensions: e.g. 2000mm*50mm, 2m*0.5m, 2000*50, 500mm乘以2500mm
     SIZE_PATTERN = re.compile(
-        r"(\d+(?:\.\d+)?)\s*(?:mm|cm|m|厘米|米|毫米)?\s*[\*×xX]\s*(\d+(?:\.\d+)?)\s*(?:mm|cm|m|厘米|米|毫米)?"
+        r"(\d+(?:\.\d+)?)\s*(?:mm|cm|m|厘米|米|毫米)?\s*(?:[\*×xX]|乘以)\s*(\d+(?:\.\d+)?)\s*(?:mm|cm|m|厘米|米|毫米)?"
     )
     PRICE_PATTERN = re.compile(r"(\d{3,4})\s*元")
+    # Area: e.g. 2.5平米, 2.5平方米, 2.5㎡
+    AREA_PATTERN = re.compile(r"(\d+(?:\.\d+)?)\s*(?:平米|平方米|㎡)")
 
     # Common colors in furniture industry
+    # Known component types (whitelist — canonical names matching DB)
+    COMPONENT_TYPE_KEYWORDS = [
+        "门板", "柜身", "护墙", "背板", "见光板", "收口条", "同色封边条",
+    ]
+    # Aliases that map to canonical component types
+    COMPONENT_TYPE_ALIASES = {
+        "柜身": ["柜体", "柜子", "衣柜", "橱柜"],
+        "门板": ["柜门"],
+    }
+
     COLOR_KEYWORDS = [
         "咖啡灰", "象牙白", "纯黑", "胡桃木", "橡木", "樱桃木",
         "白", "黑", "灰", "红", "黄", "蓝", "绿", "木色", "原木",
     ]
 
-    # Common substrates
+    # Common substrates (longer first for greedy matching)
     SUBSTRATE_KEYWORDS = [
-        "ENF级实木颗粒板", "实木颗粒板", "颗粒板",
-        "多层实木板", "多层板",
+        "ENF级实木颗粒板（负氧离子抗菌因子）",
+        "ENF级实木颗粒板", "E0级实木颗粒板",
+        "实木颗粒板", "颗粒板",
+        "复合多层板", "多层实木板", "多层板",
         "密度板", "中纤板", "mdf",
-        "欧松板", "OSB",
-        "实木板", "原木板",
+        "ENF级欧松板（负氧离子抗菌因子）", "ENF级欧松板（同步木纹）",
+        "ENF级欧松板", "欧松板", "OSB",
+        "匠芯实木板", "橡胶木板", "实木板", "原木板",
     ]
 
     def __init__(self):
         self.rewriter = QueryRewriter()
         self._db_model_pattern: Optional[re.Pattern] = None
+        self._db_color_keywords: List[str] = []
         self._load_model_pattern_from_db()
+        self._load_color_keywords_from_db()
 
     def _load_model_pattern_from_db(self) -> None:
         """Build precise model pattern from database."""
@@ -76,6 +93,21 @@ class QueryUnderstandingEngine:
                 self._db_model_pattern = re.compile(pattern, re.IGNORECASE)
         except Exception as e:
             logger.warning("Failed to load model pattern from DB", error=str(e))
+
+    def _load_color_keywords_from_db(self) -> None:
+        """Load all color names from price_variants for accurate extraction."""
+        try:
+            from app.core.database import engine
+            from sqlalchemy import text
+            with engine.connect() as conn:
+                rows = conn.execute(text("SELECT DISTINCT color_name FROM price_variants WHERE color_name IS NOT NULL")).fetchall()
+                colors = [r[0] for r in rows if r[0]]
+            if colors:
+                # Sort by length descending so longer names match first
+                # (e.g. █咖啡灰 matches before 咖啡灰)
+                self._db_color_keywords = sorted(colors, key=len, reverse=True)
+        except Exception as e:
+            logger.warning("Failed to load color keywords from DB", error=str(e))
 
     def _get_model_pattern(self) -> re.Pattern:
         """Return DB-backed pattern if available, else fallback."""
@@ -292,8 +324,9 @@ class QueryUnderstandingEngine:
             entities["thickness"] = t
             break  # Take the first valid standalone thickness
 
-        # Color
-        for color in self.COLOR_KEYWORDS:
+        # Color — use DB colors first (includes prefixes like █), fallback to hardcoded
+        color_sources = self._db_color_keywords if self._db_color_keywords else self.COLOR_KEYWORDS
+        for color in color_sources:
             if color in query:
                 entities["color_name"] = color
                 break
@@ -302,6 +335,25 @@ class QueryUnderstandingEngine:
         for substrate in self.SUBSTRATE_KEYWORDS:
             if substrate in query:
                 entities["substrate"] = substrate
+                break
+
+        # Area
+        area_match = self.AREA_PATTERN.search(query)
+        if area_match:
+            entities["area"] = float(area_match.group(1))
+
+        # Component type — check canonicals and aliases, longer first
+        all_ct_patterns = []
+        for canonical in self.COMPONENT_TYPE_KEYWORDS:
+            all_ct_patterns.append((canonical, canonical))
+        for canonical, aliases in self.COMPONENT_TYPE_ALIASES.items():
+            for alias in aliases:
+                all_ct_patterns.append((alias, canonical))
+        # Sort by alias length descending to match longer first
+        all_ct_patterns.sort(key=lambda x: len(x[0]), reverse=True)
+        for alias, canonical in all_ct_patterns:
+            if alias in query:
+                entities["component_type"] = canonical
                 break
 
         return entities

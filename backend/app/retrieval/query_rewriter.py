@@ -46,10 +46,16 @@ class QueryRewriter:
     }
 
     SUBSTRATE_SYNONYMS: Dict[str, List[str]] = {
-        "颗粒板": ["刨花板", "实木颗粒板", "ENF级实木颗粒板", "颗粒"],
+        # Keep E0/ENF prefixes distinct — they have different prices
+        "E0级实木颗粒板": ["E0颗粒板", "E0实木颗粒板"],
+        "ENF级实木颗粒板": ["ENF颗粒板", "ENF实木颗粒板"],
+        "颗粒板": ["刨花板", "实木颗粒板", "颗粒"],
+        "复合多层板": ["复合多层"],
         "多层板": ["多层实木板", "胶合板", "多层"],
         "密度板": ["中纤板", "中密度纤维板", "MDF", "纤维板", "密度"],
+        "ENF级欧松板": ["ENF欧松板"],
         "欧松板": ["OSB", "定向结构刨花板", "欧松"],
+        "匠芯实木板": ["匠芯实木"],
         "实木板": ["原木板", "实木", "原木"],
     }
 
@@ -75,6 +81,8 @@ class QueryRewriter:
 
     def __init__(self):
         self._build_alias_maps()
+        self._db_colors: List[str] = []
+        self._load_db_colors()
         # Session context store: session_id → last_entities
         self._session_context: Dict[str, Dict[str, Any]] = {}
 
@@ -90,6 +98,19 @@ class QueryRewriter:
             for alias in aliases:
                 self._substrate_alias_map[alias] = canonical
             self._substrate_alias_map[canonical] = canonical
+
+    def _load_db_colors(self) -> None:
+        """Load color names from DB for accurate extraction."""
+        try:
+            from app.core.database import engine
+            from sqlalchemy import text
+            with engine.connect() as conn:
+                rows = conn.execute(text(
+                    "SELECT DISTINCT color_name FROM price_variants WHERE color_name IS NOT NULL"
+                )).fetchall()
+                self._db_colors = sorted([r[0] for r in rows if r[0]], key=len, reverse=True)
+        except Exception:
+            pass  # fallback to COLOR_SYNONYMS only
 
     # ── Public API ─────────────────────────────────────────────
 
@@ -116,6 +137,7 @@ class QueryRewriter:
         rewritten = rewritten.strip()
 
         # Step 2: Spell correction + synonym normalization
+        rewritten = self._normalize_component_types(rewritten)
         rewritten = self._normalize_colors(rewritten)
         rewritten = self._normalize_substrates(rewritten)
         rewritten = self._correct_spelling(rewritten)
@@ -155,22 +177,68 @@ class QueryRewriter:
                     query = pattern.sub(canonical, query)
         return query
 
-    def _normalize_substrates(self, query: str) -> str:
-        """Replace substrate aliases with canonical names."""
-        aliases = sorted(self._substrate_alias_map.keys(), key=len, reverse=True)
+    def _normalize_component_types(self, query: str) -> str:
+        """Replace component type aliases with canonical names."""
+        # Build alias → canonical map
+        alias_map: Dict[str, str] = {}
+        for canonical, aliases in self.COMPONENT_TYPE_ALIASES.items():
+            for alias in aliases:
+                alias_map[alias] = canonical
+            alias_map[canonical] = canonical
+        aliases = sorted(alias_map.keys(), key=len, reverse=True)
+        matches = []
         for alias in aliases:
-            if alias in query:
+            for m in re.finditer(re.escape(alias), query):
+                start, end = m.start(), m.end()
+                if any(start < e and end > s for s, e, _ in matches):
+                    continue
+                matches.append((start, end, alias_map[alias]))
+        matches.sort(key=lambda x: x[0])
+        parts = []
+        prev_end = 0
+        for start, end, canonical in matches:
+            parts.append(query[prev_end:start])
+            parts.append(canonical)
+            prev_end = end
+        parts.append(query[prev_end:])
+        return "".join(parts)
+
+    def _normalize_substrates(self, query: str) -> str:
+        """Replace substrate aliases with canonical names.
+        
+        Uses position-aware replacement to avoid shorter aliases corrupting
+        longer canonical names (e.g. '实木颗粒板' inside 'E0级实木颗粒板').
+        """
+        aliases = sorted(self._substrate_alias_map.keys(), key=len, reverse=True)
+        # Find all non-overlapping matches (longest first)
+        matches = []
+        for alias in aliases:
+            for m in re.finditer(re.escape(alias), query):
+                start, end = m.start(), m.end()
+                # Skip if this match overlaps with any already-recorded match
+                if any(start < e and end > s for s, e, _ in matches):
+                    continue
                 canonical = self._substrate_alias_map[alias]
-                query = query.replace(alias, canonical)
-        return query
+                matches.append((start, end, canonical))
+        # Sort by position and replace
+        matches.sort(key=lambda x: x[0])
+        parts = []
+        prev_end = 0
+        for start, end, canonical in matches:
+            parts.append(query[prev_end:start])
+            parts.append(canonical)
+            prev_end = end
+        parts.append(query[prev_end:])
+        return "".join(parts)
 
     def _correct_spelling(self, query: str) -> str:
         """Correct common misspellings using fuzzy matching."""
         # Build candidate vocabulary
         candidates = list(self.COLOR_SYNONYMS.keys()) + list(self.SUBSTRATE_SYNONYMS.keys())
 
-        # Tokenize query into potential words (2+ chars)
-        tokens = re.findall(r"[\u4e00-\u9fff]{2,}", query)
+        # Tokenize query into potential words (2+ chars), including adjacent alphanumerics
+        # so that 'E0级实木颗粒板' is treated as one token, not split into '级实木颗粒板'
+        tokens = re.findall(r"[a-zA-Z0-9]*[\u4e00-\u9fff]{2,}[a-zA-Z0-9]*", query)
 
         corrections = {}
         for token in tokens:
@@ -259,6 +327,15 @@ class QueryRewriter:
             self._session_context[session_id] = existing
             logger.debug("Session context updated", session_id=session_id, entities=existing)
 
+    # Known component types (canonical names matching DB)
+    COMPONENT_TYPE_KEYWORDS = [
+        "门板", "柜身", "护墙", "背板", "见光板", "收口条", "同色封边条",
+    ]
+    COMPONENT_TYPE_ALIASES = {
+        "柜身": ["柜体", "柜子", "衣柜", "橱柜"],
+        "门板": ["柜门"],
+    }
+
     def _extract_entities_from_query(self, query: str) -> Dict[str, Any]:
         """Quick entity extraction for context tracking."""
         entities = {}
@@ -268,10 +345,11 @@ class QueryRewriter:
         if m:
             entities["model_no"] = m.group(1)
 
-        # Color
-        for canonical in self.COLOR_SYNONYMS:
-            if canonical in query:
-                entities["color_name"] = canonical
+        # Color — use DB colors first (includes █ prefixes), then fallback
+        color_sources = self._db_colors if self._db_colors else list(self.COLOR_SYNONYMS.keys())
+        for color in color_sources:
+            if color in query:
+                entities["color_name"] = color
                 break
 
         # Substrate
@@ -280,10 +358,30 @@ class QueryRewriter:
                 entities["substrate"] = canonical
                 break
 
-        # Thickness
-        t = re.search(r"(\d{2,3})\s*(?:mm|毫米|厘)", query)
-        if t:
-            entities["thickness"] = int(t.group(1))
+        # Thickness — avoid numbers inside dimension patterns (e.g. 500mm in 500mm*2500mm)
+        size_spans = []
+        for m in re.finditer(r"(\d+(?:\.\d+)?)\s*(?:mm|cm|m|厘米|米|毫米)?\s*(?:[\*×xX]|乘以)\s*(\d+(?:\.\d+)?)", query):
+            size_spans.append((m.start(), m.end()))
+        for m in re.finditer(r"(\d{2,3})\s*(?:mm|毫米|厘)", query):
+            t = int(m.group(1))
+            if not (5 <= t <= 100):
+                continue
+            t_start, t_end = m.start(), m.end()
+            if any(t_start < s_end and t_end > s_start for s_start, s_end in size_spans):
+                continue
+            entities["thickness"] = t
+            break
+
+        # Area
+        a = re.search(r"(\d+(?:\.\d+)?)\s*(?:平米|平方米|㎡)", query)
+        if a:
+            entities["area"] = float(a.group(1))
+
+        # Component type — whitelist only, longer first
+        for ct in self.COMPONENT_TYPE_KEYWORDS:
+            if ct in query:
+                entities["component_type"] = ct
+                break
 
         return entities
 

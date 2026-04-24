@@ -12,10 +12,11 @@ Page({
 
   onLoad() {
     const app = getApp();
-    const sessionId = wx.getStorageSync("chat_session_id") || "wx_" + Date.now();
-    wx.setStorageSync("chat_session_id", sessionId);
+    // 每次进入都生成新 session，清空历史从头开始
+    const sessionId = "wx_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
 
     this.setData({
+      messages: [],
       sessionId: sessionId,
       apiBase: app.globalData.apiBase.replace("/api", ""),
     });
@@ -85,20 +86,55 @@ Page({
 
     // 提取产品数据
     if (sd.products && sd.products.length > 0) {
-      msg.products = sd.products.map((p) => ({
-        ...p,
-        // 处理图片URL
-        image_urls: (p.image_urls || []).map((url) => {
-          if (url.startsWith("http")) return url;
-          return this.data.apiBase + url;
-        }),
-      }));
+      msg.products = sd.products.map((p) => {
+        const apiBase = this.data.apiBase;
+        const rawUrls = p.image_urls || [];
+        const imageUrls = rawUrls.map((url) => {
+          if (url.indexOf("http") === 0) return url;
+          return apiBase + url;
+        });
+        const area = p.area;
+        const effArea = p.effective_area;
+        return {
+          ...p,
+          _image_urls: imageUrls,
+          applicable_models: (p.applicable_models || []).map((m) => {
+            const rawUrls = m.image_urls || [];
+            const imageUrls = rawUrls.map((url) => {
+              if (url.indexOf("http") === 0) return url;
+              return apiBase + url;
+            });
+            return {
+              model_no: m.model_no,
+              name: m.name || m.model_no,
+              description: m.description || "",
+              _image_urls: imageUrls,
+              _has_image: imageUrls.length > 0,
+              _local_image_url: "",
+            };
+          }),
+          _color_display:
+            p.related_options &&
+            p.related_options.color_name &&
+            p.related_options.color_name.length > 1
+              ? p.related_options.color_name.join("、")
+              : p.color_name || "-",
+          rules_applied: p.rules_applied || [],
+          warnings: p.warnings || [],
+          _has_area: area != null,
+          _has_effective_area: effArea != null && effArea !== area,
+          _has_total_price: p.total_price != null,
+        };
+      });
     }
 
     // 提取引导选项
     if (sd.guide_mode && sd.options) {
       const options = sd.options;
-      if (options.color_name && options.color_name.length > 0) {
+      if (options.component_type && options.component_type.length > 0) {
+        msg.options = options.component_type;
+        msg.optionsLabel = "可选类型：";
+      } else if (options.color_name && options.color_name.length > 0) {
         msg.options = options.color_name;
         msg.optionsLabel = "可选颜色：";
       } else if (options.substrate && options.substrate.length > 0) {
@@ -111,6 +147,9 @@ Page({
     }
 
     this.addMessageObj(msg);
+    // 预下载图片到本地（真机 <image> 组件加载 HTTP 图片受限，本地路径更可靠）
+    const msgIndex = this.data.messages.length - 1;
+    this.preloadImages(msgIndex);
   },
 
   // 格式化文本（把 markdown 粗体转成 rich-text 支持的格式）
@@ -156,6 +195,43 @@ Page({
         scrollToId: "msg-" + this.data.messages[len - 1].id,
       });
     }
+  },
+
+  // 预下载门型图片到本地
+  preloadImages(msgIndex) {
+    const msg = this.data.messages[msgIndex];
+    if (!msg || !msg.products) return;
+    msg.products.forEach((p, pIdx) => {
+      (p.applicable_models || []).forEach((m, mIdx) => {
+        if (m._image_urls && m._image_urls.length > 0 && !m._local_image_url) {
+          wx.downloadFile({
+            url: m._image_urls[0],
+            success: (res) => {
+              if (res.statusCode === 200) {
+                const key = `messages[${msgIndex}].products[${pIdx}].applicable_models[${mIdx}]._local_image_url`;
+                this.setData({ [key]: res.tempFilePath });
+                console.log("图片下载成功", m._image_urls[0], res.tempFilePath);
+              }
+            },
+            fail: (err) => {
+              console.error("图片下载失败", m._image_urls[0], err);
+            }
+          });
+        }
+      });
+    });
+  },
+
+  // 图片加载成功
+  onImageLoad(e) {
+    console.log("图片加载成功", e.currentTarget.dataset.index);
+  },
+
+  // 图片加载失败
+  onImageError(e) {
+    const idx = e.currentTarget.dataset.index;
+    console.error("图片加载失败", idx, e);
+    wx.showToast({ title: "图片加载失败", icon: "none" });
   },
 
   // 预览图片
