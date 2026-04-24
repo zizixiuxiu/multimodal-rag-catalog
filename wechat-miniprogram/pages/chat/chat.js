@@ -47,15 +47,21 @@ Page({
   onOptionTap(e) {
     const value = e.currentTarget.dataset.value;
     const label = e.currentTarget.dataset.label || "";
-    // 如果是型号选项，尝试带上产品类型上下文（如"套装门五金 101"）
+    // 根据选项类型构建更明确的查询，带上component_type上下文
     let query = value;
     const lastBotMsg = this.data.messages.slice().reverse().find(m => m.role === "bot");
-    if (lastBotMsg && lastBotMsg.products && lastBotMsg.products.length > 0) {
-      const ct = lastBotMsg.products[0].component_type;
-      if (label.indexOf("型号") >= 0 && ct && value.indexOf(ct) < 0) {
-        query = ct + " " + value;
-      }
+    const ct = lastBotMsg ? lastBotMsg._component_type : "";
+
+    if (label.indexOf("型号") >= 0 && ct && value.indexOf(ct) < 0) {
+      query = ct + " " + value;
+    } else if (label.indexOf("颜色") >= 0 && ct && value.indexOf(ct) < 0) {
+      query = ct + " " + value;
+    } else if (label.indexOf("基材") >= 0 && ct && value.indexOf(ct) < 0) {
+      query = ct + " " + value;
+    } else if (label.indexOf("厚度") >= 0 && ct && value.indexOf(ct) < 0) {
+      query = ct + " " + value;
     }
+
     this.addMessage("user", value);
     this.sendToBot(query);
   },
@@ -92,6 +98,7 @@ Page({
       products: [],
       options: [],
       optionsLabel: "",
+      _component_type: "", // 用于选项按钮带上上下文
     };
 
     // 提取全局计价规则（双开门/子母门等特殊规则在 structured_data.rules_applied 中）
@@ -149,6 +156,7 @@ Page({
       if (options.component_type && options.component_type.length > 0) {
         msg.options = options.component_type;
         msg.optionsLabel = "可选类型：";
+        msg._component_type = ""; // 类型选择时清空
       } else if (options.model_no && options.model_no.length > 0) {
         msg.options = options.model_no;
         msg.optionsLabel = "可选型号：";
@@ -161,6 +169,17 @@ Page({
       } else if (options.thickness && options.thickness.length > 0) {
         msg.options = options.thickness.map((t) => t + "mm");
         msg.optionsLabel = "可选厚度：";
+      }
+    }
+
+    // 从产品中提取component_type，用于选项按钮上下文
+    if (msg.products.length > 0 && msg.products[0].component_type) {
+      msg._component_type = msg.products[0].component_type;
+    } else if (!msg._component_type) {
+      // 引导模式下，尝试从之前的消息继承component_type
+      const prevBot = this.data.messages.slice().reverse().find(m => m.role === "bot" && m._component_type);
+      if (prevBot) {
+        msg._component_type = prevBot._component_type;
       }
     }
 
