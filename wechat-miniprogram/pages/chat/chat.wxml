@@ -89,8 +89,8 @@
                   <view wx:if="{{p.warnings && p.warnings.length > 0}}" class="warn-box">
                     <view wx:for="{{p.warnings}}" wx:for-item="warn" wx:key="*this" class="warn-item">⚠️ {{warn}}</view>
                   </view>
-                  <!-- 可做门型 -->
-                  <view wx:if="{{p.applicable_models && p.applicable_models.length > 0}}" class="models-box">
+                  <!-- 可做门型（用户已选具体门型时不展示） -->
+                  <view wx:if="{{p.applicable_models && p.applicable_models.length > 1}}" class="models-box">
                     <text class="models-label">可做门型：</text>
                     <view class="models-grid">
                       <view wx:for="{{p.applicable_models}}" wx:for-item="m" wx:key="model_no" class="model-card">
