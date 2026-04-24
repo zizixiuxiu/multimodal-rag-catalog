@@ -1,6 +1,6 @@
 App({
   globalData: {
-    apiBase: "http://192.168.6.178:8000/api",
+    apiBase: "http://10.233.104.152:8000/api",
   },
 
   onLaunch() {
