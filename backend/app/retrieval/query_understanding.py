@@ -50,6 +50,7 @@ class QueryUnderstandingEngine:
         "第二代铝木门", "第二代铝框隐形门", "饰面隐形门",
         "套装门附件", "异形件工艺费",
         "双开门", "子母门",
+        "特殊工艺产品", "木抽盒及分线",
     ]
     # Aliases that map to canonical component types
     COMPONENT_TYPE_ALIASES = {
@@ -66,6 +67,8 @@ class QueryUnderstandingEngine:
         "异形件工艺费": ["工艺费", "开孔费", "木架费", "开槽费", "圆弧工艺", "切角工艺"],
         "双开门": ["对开门", "双扇门"],
         "子母门": ["子母套装门"],
+        "特殊工艺产品": ["格栅", "圆弧护墙", "圆弧板", "铝立板", "ABA加厚板", "斜拼柜"],
+        "木抽盒及分线": ["木抽盒", "格子架", "裤架", "拉板抽", "木分线"],
     }
 
     COLOR_KEYWORDS = [
