@@ -240,14 +240,20 @@ class GenerationEngine:
                     "3. 铝框玻璃门：提供 component_type='铝框玻璃门' + model_no(如DL01S) + color(铝框颜色) + substrate(玻璃颜色)\n"
                     "4. 皮革门：提供 component_type='皮革门' + model_no(如DP01) + color + substrate\n"
                     "5. 免漆套装门：提供 component_type='免漆套装门' + model_no(如GE-0004) + color + substrate\n"
-                    "6. 特定门型：提供 model_no + 可选的 color/substrate/thickness"
+                    "6. 第二代铝木门：提供 component_type='第二代铝木门' + model_no(RL-2/RL-3) + color + substrate\n"
+                    "7. 第二代铝框隐形门：提供 component_type='第二代铝框隐形门' + model_no(RL-1) + color + substrate\n"
+                    "8. 饰面隐形门：提供 component_type='饰面隐形门' + color + substrate(颗粒板/多层板)\n"
+                    "9. 套装门附件：提供 component_type='套装门附件' + model_no(如哑口单包套/门套线/踢脚线)\n"
+                    "10. 异形件工艺费：提供 component_type='异形件工艺费' + model_no(如门铰开孔费A/圆弧板工艺费)\n"
+                    "11. 双开门/子母门：提供 component_type='双开门'或'子母门' + model_no + color + substrate，按免漆套装门价格×1.8/1.5倍计价\n"
+                    "12. 特定门型：提供 model_no + 可选的 color/substrate/thickness"
                 ),
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "component_type": {
                             "type": "string",
-                            "description": "组件类型：柜身、门板、护墙、吸塑柜门、铝框玻璃门、皮革门、免漆套装门。客户说做柜子/柜体时用'柜身'，说门时用'门板'，说墙板/护墙时用'护墙'，说吸塑门/包覆门时用'吸塑柜门'，说铝框门/玻璃门时用'铝框玻璃门'，说皮革门/皮门时用'皮革门'，说套装门/室内门/房门时用'免漆套装门'。只要客户提到其中任何一个，就必须填。",
+                            "description": "组件类型：柜身、门板、护墙、吸塑柜门、铝框玻璃门、皮革门、免漆套装门、第二代铝木门、第二代铝框隐形门、饰面隐形门、套装门附件、异形件工艺费、双开门、子母门。客户说做柜子/柜体时用'柜身'，说门时用'门板'，说墙板/护墙时用'护墙'，说吸塑门/包覆门时用'吸塑柜门'，说铝框门/玻璃门时用'铝框玻璃门'，说皮革门/皮门时用'皮革门'，说套装门/室内门/房门时用'免漆套装门'，说铝木门时用'第二代铝木门'，说铝框隐形门时用'第二代铝框隐形门'，说隐形门/木质隐形门时用'饰面隐形门'，说哑口套/门套线/踢脚线/门楣板时用'套装门附件'，说工艺费/开孔费/木架费/圆弧工艺时用'异形件工艺费'，说双开门/对开门时用'双开门'，说子母门时用'子母门'。只要客户提到其中任何一个，就必须填。","}]
                         },
                         "model_no": {
                             "type": "string",
@@ -367,6 +373,16 @@ class GenerationEngine:
         room = params.room
 
         MAX_VARIANTS = 8
+
+        # ── Handle 双开门/子母门 special pricing ──
+        door_multiplier = 1.0
+        original_component_type = component_type
+        if component_type == "双开门":
+            door_multiplier = 1.8
+            component_type = "免漆套装门"
+        elif component_type == "子母门":
+            door_multiplier = 1.5
+            component_type = "免漆套装门"
 
         with get_db_context() as db:
             # ── Determine product scope ──
@@ -616,10 +632,17 @@ class GenerationEngine:
                             f"{v.component_type}单件不足{min_area}㎡按{min_area}㎡计价"
                         )
 
+                # Apply 双开门/子母门 multiplier
+                unit_price = float(v.unit_price)
+                if door_multiplier != 1.0:
+                    unit_price = round(unit_price * door_multiplier, 2)
+                    item["unit_price"] = unit_price
+                    item["component_type"] = original_component_type
+
                 if area is not None:
                     item["area"] = round(area, 4)
                     item["effective_area"] = round(effective_area, 4) if effective_area else None
-                    item["total_price"] = round(float(v.unit_price) * (effective_area or area), 2)
+                    item["total_price"] = round(unit_price * (effective_area or area), 2)
 
                 if v.component_type == "门板":
                     item["applicable_models"] = [
@@ -628,6 +651,12 @@ class GenerationEngine:
                     ]
 
                 results.append(item)
+
+            # Add 双开门/子母门 pricing rule
+            if door_multiplier == 1.8:
+                rules_applied.append("双开门按单樘室内门价格的1.8倍计价，踩子口另加300元/套")
+            elif door_multiplier == 1.5:
+                rules_applied.append("子母门按单樘室内门价格的1.5倍计价，踩子口另加300元/套")
 
             # Collect product images
             image_urls = list(product_info.image_urls or [])
@@ -749,6 +778,26 @@ class GenerationEngine:
             f"{leather_lines}\n\n"
             "【产品型号 — 免漆套装门】\n"
             f"{set_lines}\n\n"
+            "【产品型号 — 第二代铝木门】\n"
+            "- RL-2: 外平内开平面线条铝框门，门扇厚53mm (基础价另+3300元/套)\n"
+            "- RL-3: 外平外开或内平内开窄边铝框门，门扇厚43mm (基础价另+2880元/套)\n\n"
+            "【产品型号 — 第二代铝框隐形门】\n"
+            "- RL-1: 18叉隐形铝框门，门扇厚53mm (基础价另+3300元/套)\n\n"
+            "【产品型号 — 饰面隐形门】\n"
+            "- 隐形门（颗粒板表面）: 2940元/樘\n"
+            "- 隐形门（多层板表面）: 3240元/樘\n\n"
+            "【产品型号 — 套装门附件】\n"
+            "- 哑口单包套: 108~123元/米（复合/碳晶/多层）\n"
+            "- 哑口双包套: 138~153元/米（复合/碳晶/多层）\n"
+            "- 门套线: 36元/米（碳晶/多层）\n"
+            "- 踢脚线: 45元/米（碳晶/多层）\n"
+            "- 门楣板: 420元/平方\n\n"
+            "【产品型号 — 异形件工艺费】\n"
+            "- 门铰开孔费A: 30元/扇 | B: 60元/扇（玻璃门）\n"
+            "- 木架费: 30~69元/扇（按面积分档）\n"
+            "- 灯槽开槽费: 60元/块 | 酒格工艺费: 135元/组\n"
+            "- 圆角/切角工艺费: 45元/个 | 圆弧板工艺费: 180元/件\n"
+            "- 护墙海棠角: 30元/米 | 护墙阳角边: 60元/边\n\n"
             "【报价工具 — 核心规则】\n"
             "⚠️ 有 get_price_quote 工具查实时价格，**禁止编造任何价格/选项**。\n"
             "⚠️ 客户提到柜身/门板/护墙/颜色/基材/厚度/门型时，**立即调用工具**。\n"
@@ -756,7 +805,7 @@ class GenerationEngine:
             "   所以你在这个阶段**绝对不要提任何价格或参考价**，只引导用户做选择。\n"
             "⚠️ **每轮对话中，只要客户补充了新参数，必须重新调用工具**。\n\n"
             "【component_type — 最关键】\n"
-            "柜身、门板、护墙、吸塑柜门、铝框玻璃门、皮革门、免漆套装门的价格体系完全不同，**必须明确确认类型**，不能猜测！\n"
+            "柜身、门板、护墙、吸塑柜门、铝框玻璃门、皮革门、免漆套装门、第二代铝木门、第二代铝框隐形门、饰面隐形门的价格体系完全不同，**必须明确确认类型**，不能猜测！\n"
             "- 客户说'柜子/衣柜/橱柜' → 理解为'柜身'\n"
             "- 客户说'门/门板' → 理解为'门板'\n"
             "- 客户说'墙/护墙' → 理解为'护墙'\n"
@@ -764,8 +813,15 @@ class GenerationEngine:
             "- 客户说'铝框门/铝框玻璃门/玻璃门' → 理解为'铝框玻璃门'\n"
             "- 客户说'皮革门/皮门' → 理解为'皮革门'\n"
             "- 客户说'套装门/室内门/房门/卧室门' → 理解为'免漆套装门'\n"
+            "- 客户说'铝木门/第二代铝木门' → 理解为'第二代铝木门'\n"
+            "- 客户说'铝框隐形门/第二代铝框隐形门' → 理解为'第二代铝框隐形门'\n"
+            "- 客户说'隐形门/木质隐形门/饰面隐形门' → 理解为'饰面隐形门'\n"
+            "- 客户说'哑口套/门套线/踢脚线/门楣板' → 理解为'套装门附件'\n"
+            "- 客户说'工艺费/开孔费/木架费/圆弧工艺' → 理解为'异形件工艺费'\n"
+            "- 客户说'双开门/对开门' → 理解为'双开门'（按单樘价格×1.8倍计价）\n"
+            "- 客户说'子母门' → 理解为'子母门'（按单樘价格×1.5倍计价）\n"
             "- 如果客户没有明确说类型，工具会返回 component_type 选项，你必须追问：\n"
-            "  '请问您是想做柜身、门板、护墙、吸塑柜门、铝框玻璃门、皮革门还是免漆套装门呢？'\n\n"
+            "  '请问您是想做柜身、门板、护墙、吸塑柜门、铝框玻璃门、皮革门、免漆套装门、第二代铝木门、第二代铝框隐形门、饰面隐形门、套装门附件、异形件工艺费、双开门还是子母门呢？'\n\n"
             "【渐进式报价流程 — 每轮只做一步】\n"
             "1. 客户说'柜身' → 调用工具(component_type='柜身') → 返回颜色选项 → 问颜色\n"
             "2. 客户说'咖啡灰' → 调用工具(+color) → 返回基材选项 → 问基材\n"
