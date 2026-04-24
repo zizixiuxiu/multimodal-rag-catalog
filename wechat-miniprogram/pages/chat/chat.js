@@ -46,8 +46,18 @@ Page({
   // 点击引导选项按钮
   onOptionTap(e) {
     const value = e.currentTarget.dataset.value;
+    const label = e.currentTarget.dataset.label || "";
+    // 如果是型号选项，尝试带上产品类型上下文（如"套装门五金 101"）
+    let query = value;
+    const lastBotMsg = this.data.messages.slice().reverse().find(m => m.role === "bot");
+    if (lastBotMsg && lastBotMsg.products && lastBotMsg.products.length > 0) {
+      const ct = lastBotMsg.products[0].component_type;
+      if (label.indexOf("型号") >= 0 && ct && value.indexOf(ct) < 0) {
+        query = ct + " " + value;
+      }
+    }
     this.addMessage("user", value);
-    this.sendToBot(value);
+    this.sendToBot(query);
   },
 
   // 发送到后端
@@ -84,6 +94,9 @@ Page({
       optionsLabel: "",
     };
 
+    // 提取全局计价规则（双开门/子母门等特殊规则在 structured_data.rules_applied 中）
+    const globalRules = sd.rules_applied || [];
+
     // 提取产品数据
     if (sd.products && sd.products.length > 0) {
       msg.products = sd.products.map((p) => {
@@ -95,6 +108,8 @@ Page({
         });
         const area = p.area;
         const effArea = p.effective_area;
+        // 合并全局规则和产品级规则（去重）
+        const productRules = [...new Set([...(p.rules_applied || []), ...globalRules])];
         return {
           ...p,
           _image_urls: imageUrls,
@@ -119,7 +134,7 @@ Page({
             p.related_options.color_name.length > 1
               ? p.related_options.color_name.join("、")
               : p.color_name || "-",
-          rules_applied: p.rules_applied || [],
+          rules_applied: productRules,
           warnings: p.warnings || [],
           _has_area: area != null,
           _has_effective_area: effArea != null && effArea !== area,
@@ -134,6 +149,9 @@ Page({
       if (options.component_type && options.component_type.length > 0) {
         msg.options = options.component_type;
         msg.optionsLabel = "可选类型：";
+      } else if (options.model_no && options.model_no.length > 0) {
+        msg.options = options.model_no;
+        msg.optionsLabel = "可选型号：";
       } else if (options.color_name && options.color_name.length > 0) {
         msg.options = options.color_name;
         msg.optionsLabel = "可选颜色：";

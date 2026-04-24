@@ -698,11 +698,20 @@ class GenerationEngine:
                 "thickness": sorted({str(v.thickness) for v in related_vars}),
             }
 
+            # 对于双开门/子母门等特殊产品，使用更友好的 model_no 显示
+            display_model_no = product_info.model_no
+            display_model_name = product_info.name
+            if original_component_type in ("双开门", "子母门") and model_no:
+                display_model_no = model_no
+                display_model_name = f"{original_component_type}({model_no})"
+            elif original_component_type not in (None, "门板", "柜身", "护墙"):
+                display_model_name = original_component_type
+
             return {
-                "model_no": product_info.model_no,
-                "model_name": product_info.name,
+                "model_no": display_model_no,
+                "model_name": display_model_name,
                 "family": product_info.family,
-                "component_type": component_type,
+                "component_type": original_component_type or component_type,
                 "color_name": color_name,
                 "substrate": substrate,
                 "thickness": thickness,

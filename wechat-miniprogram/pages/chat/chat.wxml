@@ -21,6 +21,24 @@
           <rich-text wx:if="{{item.formattedText}}" nodes="{{item.formattedText}}" />
           <text wx:else>{{item.text}}</text>
 
+          <!-- 引导选项按钮 -->
+          <view wx:if="{{item.options && item.options.length > 0}}" class="options-box">
+            <text class="options-label">{{item.optionsLabel}}</text>
+            <view class="options-grid">
+              <view
+                wx:for="{{item.options}}"
+                wx:for-item="opt"
+                wx:key="*this"
+                class="option-btn"
+                data-value="{{opt}}"
+                data-label="{{item.optionsLabel}}"
+                bindtap="onOptionTap"
+              >
+                <text>{{opt}}</text>
+              </view>
+            </view>
+          </view>
+
           <!-- 产品卡片（价格数据） -->
           <view wx:if="{{item.products && item.products.length > 0}}" class="product-cards">
             <block wx:for="{{item.products}}" wx:for-item="p" wx:key="model_no">

@@ -292,16 +292,24 @@ class QueryRewriter:
         Only adds entity types that are NOT already present in the current query.
         This prevents stale context from overriding user's new intent (e.g. changing color).
         """
-        # If query already has a model number, don't add context model
-        if self.MODEL_FULL_PATTERN.search(query):
-            return query
-
         # Extract entities already present in current query
         current_entities = self._extract_entities_from_query(query)
 
+        # If query already has a model number, don't add context model number,
+        # but still allow adding component_type if missing (e.g. user clicks a
+        # model_no option button in mini-program without specifying type)
+        has_model = bool(self.MODEL_FULL_PATTERN.search(query))
+        if has_model and "component_type" in current_entities:
+            return query
+
         additions = []
         for key, val in context.items():
-            if val and key not in current_entities:
+            if not val:
+                continue
+            # Skip model number if already present in query
+            if has_model and key == "model_no":
+                continue
+            if key not in current_entities:
                 # Thickness needs unit suffix for entity extraction to match
                 if key == "thickness":
                     additions.append(f"{val}mm")
