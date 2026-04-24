@@ -236,14 +236,18 @@ class GenerationEngine:
                     "即使参数不全，工具也会返回可用选项列表，你据此引导客户下一步选择。\n"
                     "支持两种模式：\n"
                     "1. 墙柜一体/柜身/护墙：提供 component_type + 可选的 color/substrate/thickness\n"
-                    "2. 特定门型：提供 model_no + 可选的 color/substrate/thickness"
+                    "2. 吸塑柜门：提供 component_type='吸塑柜门' + model_no(如MX-M00) + color + substrate\n"
+                    "3. 铝框玻璃门：提供 component_type='铝框玻璃门' + model_no(如DL01S) + color(铝框颜色) + substrate(玻璃颜色)\n"
+                    "4. 皮革门：提供 component_type='皮革门' + model_no(如DP01) + color + substrate\n"
+                    "5. 免漆套装门：提供 component_type='免漆套装门' + model_no(如GE-0004) + color + substrate\n"
+                    "6. 特定门型：提供 model_no + 可选的 color/substrate/thickness"
                 ),
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "component_type": {
                             "type": "string",
-                            "description": "组件类型：柜身、门板、护墙。客户说做柜子/柜体时用'柜身'，说门时用'门板'，说墙板/护墙时用'护墙'。只要客户提到其中任何一个，就必须填。",
+                            "description": "组件类型：柜身、门板、护墙、吸塑柜门、铝框玻璃门、皮革门、免漆套装门。客户说做柜子/柜体时用'柜身'，说门时用'门板'，说墙板/护墙时用'护墙'，说吸塑门/包覆门时用'吸塑柜门'，说铝框门/玻璃门时用'铝框玻璃门'，说皮革门/皮门时用'皮革门'，说套装门/室内门/房门时用'免漆套装门'。只要客户提到其中任何一个，就必须填。",
                         },
                         "model_no": {
                             "type": "string",
@@ -255,7 +259,7 @@ class GenerationEngine:
                         },
                         "substrate": {
                             "type": "string",
-                            "description": "基材名称，如 ENF级实木颗粒板、欧松板、多层板。客户提到基材时必须填。",
+                            "description": "基材名称，如 ENF级实木颗粒板、欧松板、多层板、18mm中纤板、21mm中纤板、25mm中纤板。客户提到基材时必须填。",
                         },
                         "thickness": {
                             "type": "integer",
@@ -424,6 +428,22 @@ class GenerationEngine:
                 stmt = stmt.where(PriceVariant.thickness == thickness)
 
             variants = db.execute(stmt).scalars().all()
+
+            # ── Validate model_no if explicitly provided ──
+            if model_no:
+                matching = [v for v in variants if v.applicable_models and model_no in v.applicable_models]
+                if not matching:
+                    # Model not found — return error with available models
+                    available_models = sorted({m for v in variants for m in (v.applicable_models or [])})
+                    return {
+                        "error": f"未找到门型型号「{model_no}」，请确认型号是否正确。",
+                        "component_type": component_type,
+                        "model_no": model_no,
+                        "available_options": {
+                            "model_no": available_models[:20] if available_models else []
+                        },
+                    }
+                variants = matching
 
             # ── Build available options (progressive disclosure) ──
             # Options must be derived from REAL existing combinations.
@@ -673,12 +693,62 @@ class GenerationEngine:
             for p in products
             if p['model_no'].startswith('MX-') or p['model_no'] == '墙柜一体'
         )
+        # 吸塑柜门门型
+        xisu_models = [
+            "MX-M00", "MX-M23", "MX-M24", "MX-M25", "MX-M26",
+            "MX-M15", "MX-M16", "MX-M17", "MX-M04", "MX-M34",
+            "MX-M21", "MX-M22", "MX-M33", "MX-M06", "MX-M07",
+            "MX-M01", "MX-M03", "MX-M09", "MX-M31", "MX-M35",
+            "MX-M18", "MX-M20", "MX-M19", "MX-M27", "MX-M28",
+            "MX-M29", "MX-M30", "波浪装饰板", "吸塑格栅",
+        ]
+        xisu_lines = "\n".join(f"- {m}" for m in xisu_models)
+        # 铝框玻璃门门型
+        glass_models = [
+            "DL01S: 窄边铝框玻璃门 (855元/㎡)",
+            "DL02: 弧形铝框玻璃门 (1860元/㎡)",
+            "DL04: 斜边铝框玻璃门 (1521元/㎡)",
+            "DL05: T型通顶拉手铝框玻璃门 (2550元/㎡)",
+            "DL06: A款免拉手铝框门 (2880元/㎡)",
+            "DL07: B款免拉手铝框门 (2970元/㎡)",
+        ]
+        glass_lines = "\n".join(f"- {m}" for m in glass_models)
+        # 皮革门门型
+        leather_models = [
+            "DP01: 灰色金属包边皮革门 (3504元/㎡)",
+            "DP02: 古铜拉丝金属包边皮革门 (3504元/㎡)",
+            "DP03: 编织纹皮革车线皮革门 (3504元/㎡)",
+        ]
+        leather_lines = "\n".join(f"- {m}" for m in leather_models)
+        # 免漆套装门门型
+        set_models = [
+            "GE-0004: 平板无造型 (1285元/樘)",
+            "GE-1003~GE-1014: 平板拉黑色水线 (1465元/樘)",
+            "MW-02/MW-06: 平板嵌T型黑色金属条 (1465元/樘)",
+            "MW-03: 平板嵌T型黑色金属条 (1675元/樘)",
+            "MW-04: 平板拉水线+嵌花 (1705元/樘)",
+            "GE-4010~GE-5007: 平板拉水线+嵌花 (1615元/樘)",
+            "GE-4071~GE-4085: 黑色水线+嵌花/嵌装饰条 (1614~1764元/樘)",
+            "PET-35: 平板门无造型 (1465元/樘)",
+            "PET-20~PET-42: 平板拉黑色水线 (1555元/樘)",
+            "GE-5003: 拼装成型门 (2220元/樘)",
+            "GE-5011/MW-05/MW-07/GE-5001: 拼装成型门 (2070元/樘)",
+        ]
+        set_lines = "\n".join(f"- {m}" for m in set_models)
 
         return (
             "你是奢匠家居定制的专属客服顾问「小奢」。\n\n"
             "【风格】热情专业，自然交流，适当用emoji 😊\n\n"
-            "【产品型号】\n"
+            "【产品型号 — 饰面门板】\n"
             f"{door_lines}\n\n"
+            "【产品型号 — 吸塑柜门】\n"
+            f"{xisu_lines}\n\n"
+            "【产品型号 — 铝框玻璃门】\n"
+            f"{glass_lines}\n\n"
+            "【产品型号 — 皮革门】\n"
+            f"{leather_lines}\n\n"
+            "【产品型号 — 免漆套装门】\n"
+            f"{set_lines}\n\n"
             "【报价工具 — 核心规则】\n"
             "⚠️ 有 get_price_quote 工具查实时价格，**禁止编造任何价格/选项**。\n"
             "⚠️ 客户提到柜身/门板/护墙/颜色/基材/厚度/门型时，**立即调用工具**。\n"
@@ -686,12 +756,16 @@ class GenerationEngine:
             "   所以你在这个阶段**绝对不要提任何价格或参考价**，只引导用户做选择。\n"
             "⚠️ **每轮对话中，只要客户补充了新参数，必须重新调用工具**。\n\n"
             "【component_type — 最关键】\n"
-            "柜身、门板、护墙的价格体系完全不同，**必须明确确认类型**，不能猜测！\n"
+            "柜身、门板、护墙、吸塑柜门、铝框玻璃门、皮革门、免漆套装门的价格体系完全不同，**必须明确确认类型**，不能猜测！\n"
             "- 客户说'柜子/衣柜/橱柜' → 理解为'柜身'\n"
             "- 客户说'门/门板' → 理解为'门板'\n"
             "- 客户说'墙/护墙' → 理解为'护墙'\n"
+            "- 客户说'吸塑门/吸塑柜门/包覆门' → 理解为'吸塑柜门'\n"
+            "- 客户说'铝框门/铝框玻璃门/玻璃门' → 理解为'铝框玻璃门'\n"
+            "- 客户说'皮革门/皮门' → 理解为'皮革门'\n"
+            "- 客户说'套装门/室内门/房门/卧室门' → 理解为'免漆套装门'\n"
             "- 如果客户没有明确说类型，工具会返回 component_type 选项，你必须追问：\n"
-            "  '请问您是想做柜身、门板还是护墙呢？'\n\n"
+            "  '请问您是想做柜身、门板、护墙、吸塑柜门、铝框玻璃门、皮革门还是免漆套装门呢？'\n\n"
             "【渐进式报价流程 — 每轮只做一步】\n"
             "1. 客户说'柜身' → 调用工具(component_type='柜身') → 返回颜色选项 → 问颜色\n"
             "2. 客户说'咖啡灰' → 调用工具(+color) → 返回基材选项 → 问基材\n"

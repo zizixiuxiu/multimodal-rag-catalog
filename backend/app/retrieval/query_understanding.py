@@ -46,11 +46,16 @@ class QueryUnderstandingEngine:
     # Known component types (whitelist — canonical names matching DB)
     COMPONENT_TYPE_KEYWORDS = [
         "门板", "柜身", "护墙", "背板", "见光板", "收口条", "同色封边条",
+        "吸塑柜门", "铝框玻璃门", "皮革门", "免漆套装门",
     ]
     # Aliases that map to canonical component types
     COMPONENT_TYPE_ALIASES = {
         "柜身": ["柜体", "柜子", "衣柜", "橱柜"],
         "门板": ["柜门"],
+        "吸塑柜门": ["吸塑门", "包覆门", "吸塑门板"],
+        "铝框玻璃门": ["铝框门", "玻璃门", "铝框玻璃", "铝玻璃门"],
+        "皮革门": ["皮革门板", "皮门"],
+        "免漆套装门": ["套装门", "室内门", "房门", "卧室门"],
     }
 
     COLOR_KEYWORDS = [
@@ -64,10 +69,13 @@ class QueryUnderstandingEngine:
         "ENF级实木颗粒板", "E0级实木颗粒板",
         "实木颗粒板", "颗粒板",
         "复合多层板", "多层实木板", "多层板",
+        "25mm中纤板", "21mm中纤板", "18mm中纤板",
         "密度板", "中纤板", "mdf",
         "ENF级欧松板（负氧离子抗菌因子）", "ENF级欧松板（同步木纹）",
         "ENF级欧松板", "欧松板", "OSB",
         "匠芯实木板", "橡胶木板", "实木板", "原木板",
+        "超白玻", "茶玻", "灰玻", "黑玻", "蓝星灰镀膜", "金茶", "银镜",
+        "铝蜂窝板",
     ]
 
     def __init__(self):

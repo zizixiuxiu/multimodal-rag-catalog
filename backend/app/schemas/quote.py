@@ -25,7 +25,7 @@ class PriceQuoteParams(BaseModel):
 
     component_type: Optional[str] = Field(
         default=None,
-        description="组件类型：柜身、门板、护墙、见光板、抽面",
+        description="组件类型：柜身、门板、护墙、吸塑柜门、见光板、抽面",
     )
     color_name: Optional[str] = Field(
         default=None,
@@ -33,7 +33,7 @@ class PriceQuoteParams(BaseModel):
     )
     substrate: Optional[str] = Field(
         default=None,
-        description="基材名称，如 ENF级实木颗粒板、欧松板",
+        description="基材名称，如 ENF级实木颗粒板、欧松板、18mm中纤板、21mm中纤板、25mm中纤板",
     )
     thickness: Optional[int] = Field(
         default=None,
@@ -79,6 +79,21 @@ class PriceQuoteParams(BaseModel):
             "护墙": "护墙",
             "墙板": "护墙",
             "wall": "护墙",
+            "吸塑柜门": "吸塑柜门",
+            "吸塑门": "吸塑柜门",
+            "包覆门": "吸塑柜门",
+            "铝框玻璃门": "铝框玻璃门",
+            "铝框门": "铝框玻璃门",
+            "玻璃门": "铝框玻璃门",
+            "铝框玻璃": "铝框玻璃门",
+            "皮革门": "皮革门",
+            "皮革门板": "皮革门",
+            "皮门": "皮革门",
+            "免漆套装门": "免漆套装门",
+            "套装门": "免漆套装门",
+            "室内门": "免漆套装门",
+            "房门": "免漆套装门",
+            "卧室门": "免漆套装门",
             "见光板": "见光板",
             "抽面": "抽面",
             "抽屉": "抽面",
