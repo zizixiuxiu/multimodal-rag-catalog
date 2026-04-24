@@ -75,12 +75,13 @@ class QueryRewriter:
         r"\b(MX-[A-Z]\d{2,3}[A-Z]?|WLS-\d{2,3}|LM-[A-Z]\d{2,3}-\d{2,3}|"
         r"[A-Z]{2,3}-[A-Z]{2,3}-\d{2,3}[A-Z]?|[A-Z]{2}-[A-Z]\d{2,3}|"
         r"[A-Z]{2}\d{4}[A-Z]?-\d{2,3}[A-Z]?|[A-Z]{3}-\d{3,4}|"
-        r"[A-Z]{2}\d{2,4}[A-Z]?)\b",
+        r"[A-Z]{2}\d{2,4}[A-Z]?|"
+        r"GE-\d{4}|MW-\d{2,3}|PET-\d{2,3}|RL-\d|DL0\dS?|DP0\d)\b",
         re.IGNORECASE,
     )
 
     # Known model prefixes for completion
-    KNOWN_PREFIXES = ["MX-", "WLS-"]
+    KNOWN_PREFIXES = ["MX-", "WLS-", "GE-", "MW-", "PET-", "RL-", "DL", "DP"]
 
     def __init__(self):
         self._build_alias_maps()
@@ -338,6 +339,8 @@ class QueryRewriter:
         "套装门附件", "异形件工艺费",
         "双开门", "子母门",
         "特殊工艺产品", "木抽盒及分线",
+        "PET门板", "爱格板", "EB板", "22厚门板",
+        "吸塑配件", "套装门五金",
     ]
     COMPONENT_TYPE_ALIASES = {
         "柜身": ["柜体", "柜子", "衣柜", "橱柜"],
@@ -355,6 +358,12 @@ class QueryRewriter:
         "子母门": ["子母套装门"],
         "特殊工艺产品": ["格栅", "圆弧护墙", "圆弧板", "铝立板", "ABA加厚板", "斜拼柜"],
         "木抽盒及分线": ["木抽盒", "格子架", "裤架", "拉板抽", "木分线"],
+        "PET门板": ["PET门", "PET板"],
+        "爱格板": ["爱格", "爱格门板"],
+        "EB板": ["EB饰面", "EB门板"],
+        "22厚门板": ["22厚门", "22厚板"],
+        "吸塑配件": ["吸塑罗马柱", "吸塑脚线", "吸塑顶线", "吸塑楣板", "酒格"],
+        "套装门五金": ["门锁", "门把手", "合页", "门吸", "液压合页", "指纹锁"],
     }
 
     def _extract_entities_from_query(self, query: str) -> Dict[str, Any]:
